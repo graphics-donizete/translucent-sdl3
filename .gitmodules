@@ -1,8 +1,8 @@
 [submodule "external/SDL_image"]
 	path = external/SDL_image
 	url = https://github.com/libsdl-org/SDL_image.git
-	branch = release-3.2.x
+	branch = release-3.4.x
 [submodule "external/SDL"]
 	path = external/SDL
 	url = https://github.com/libsdl-org/SDL.git
-	branch = release-3.2.x
+	branch = release-3.4.x
