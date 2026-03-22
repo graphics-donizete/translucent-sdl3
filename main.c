@@ -21,37 +21,6 @@ struct
     .opacity = .5f,
 };
 
-struct
-{
-    SDL_Window *window;
-    SDL_Renderer *renderer;
-    SDL_Texture *texture;
-    SDL_FRect texture_info;
-
-    bool is_dragging;
-    float window_scale;
-    float image_scale;
-    float opacity;
-
-    // keycode "I" for image
-    // keycode "W" for window
-    // keycode "A" for all
-    uint8_t scale_mode;
-    uint16_t tmp_scale;
-} static state = {
-    .window_scale = 1.0f,
-    .image_scale = 1.0f,
-    .opacity = .5f,
-    .texture_info = {
-        .x = 0,
-        .y = 0,
-        .w = 0,
-        .h = 0,
-    },
-    .scale_mode = SDL_SCANCODE_UNKNOWN,
-    .tmp_scale = 0,
-};
-
 static void parse_args(int argc, char *argv[])
 {
     int opt, index;
@@ -95,60 +64,102 @@ static void parse_args(int argc, char *argv[])
     }
 }
 
-SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
+struct
 {
-    parse_args(argc, argv);
+    SDL_Window *window;
+    SDL_Renderer *renderer;
+    SDL_Texture *texture;
 
-    if (!SDL_Init(SDL_INIT_VIDEO))
+    float window_scale;
+    float image_scale;
+    float opacity;
+    SDL_FRect texture_info;
+
+    bool is_dragging;
+
+    void (*event_handler)(SDL_Event *);
+} static state;
+
+struct
+{
+    uint16_t scale;
+} scale_all_state = {
+    .scale = 0,
+};
+
+static void scale_window_and_image_handler(SDL_Event *event)
+{
+    if (event->type != SDL_EVENT_KEY_DOWN)
     {
-        SDL_Log("Couldn't initialize SDL: %s", SDL_GetError());
-        return SDL_APP_FAILURE;
+        return;
     }
 
-    if (!SDL_SetHint(SDL_HINT_MAIN_CALLBACK_RATE, "60"))
+    SDL_Scancode scancode = event->key.scancode;
+
+    switch (scancode)
     {
-        SDL_Log("Couldn't set framerate: %s", SDL_GetError());
-        return SDL_APP_FAILURE;
-    }
-
-    if (!SDL_CreateWindowAndRenderer(
-            /*title*/           "A fucking moron",
-            /*width*/           320,
-            /*height*/          240,
-            /*window flags*/    SDL_WINDOW_ALWAYS_ON_TOP | SDL_WINDOW_TRANSPARENT | SDL_WINDOW_RESIZABLE,
-            &state.window,
-            &state.renderer))
+    case SDL_SCANCODE_A:
     {
-        SDL_Log("Couldn't create window/renderer: %s", SDL_GetError());
-        return SDL_APP_FAILURE;
+        scale_all_state.scale = 0;
+        break;
     }
-
-    state.texture = IMG_LoadTexture(state.renderer, args.filename);
-    if (state.texture == NULL)
+    case SDL_SCANCODE_0:
+    case SDL_SCANCODE_1:
+    case SDL_SCANCODE_2:
+    case SDL_SCANCODE_3:
+    case SDL_SCANCODE_4:
+    case SDL_SCANCODE_5:
+    case SDL_SCANCODE_6:
+    case SDL_SCANCODE_7:
+    case SDL_SCANCODE_8:
+    case SDL_SCANCODE_9:
     {
-        SDL_Log("Couldn't load texture SDL: %s", SDL_GetError());
-        return SDL_APP_FAILURE;
+        uint8_t number = ((scancode + 1) - SDL_SCANCODE_1) % 10;
+        scale_all_state.scale *= 10;
+        scale_all_state.scale += number;
+        break;
     }
+    case SDL_SCANCODE_RETURN:
+    {
+        state.window_scale = scale_all_state.scale / 100.0f;
+        SDL_SetWindowSize(state.window, state.texture->w * state.window_scale, state.texture->h * state.window_scale);
 
-    state.window_scale = args.window_scale;
-    state.image_scale = args.image_scale;
-    state.texture_info = (SDL_FRect){
-        .x = 0,
-        .y = 0,
-        .w = state.texture->w,
-        .h = state.texture->h,
-    };
-
-    SDL_SetWindowSize(state.window, state.texture->w * state.window_scale, state.texture->h * state.window_scale);
-    SDL_SetWindowOpacity(state.window, state.opacity);
-    SDL_SetRenderScale(state.renderer, state.image_scale, state.image_scale);
-    SDL_SetTextureScaleMode(state.texture, SDL_SCALEMODE_NEAREST);
-
-    return SDL_APP_CONTINUE;
+        state.image_scale = scale_all_state.scale / 100.0f;
+        SDL_SetRenderScale(state.renderer, state.image_scale, state.image_scale);
+        break;
+    }
+    }
 }
 
-static void restore_default_args_into_state()
+static void move_image_by_arrows_handler(SDL_Event *event)
 {
+    SDL_Scancode scancode = event->key.scancode;
+    SDL_FRect *info = &state.texture_info;
+
+    switch (scancode)
+    {
+    case SDL_SCANCODE_RIGHT:
+        info->x += 1;
+        break;
+    case SDL_SCANCODE_LEFT:
+        info->x -= 1;
+        break;
+    case SDL_SCANCODE_DOWN:
+        info->y += 1;
+        break;
+    case SDL_SCANCODE_UP:
+        info->y -= 1;
+        break;
+    }
+}
+
+static void restore_default_state_handler(SDL_Event *event)
+{
+    if (event->key.scancode != SDL_SCANCODE_R)
+    {
+        return;
+    }
+
     state.opacity = args.opacity;
     SDL_SetWindowOpacity(state.window, state.opacity);
 
@@ -162,99 +173,20 @@ static void restore_default_args_into_state()
     state.texture_info.y = 0;
 }
 
-static SDL_AppResult handle_key_down_event(SDL_Scancode scancode)
+static void change_opacity_handler(SDL_Event *event)
 {
-    SDL_Window *window = state.window;
-    SDL_Texture *texture = state.texture;
-    SDL_FRect *texture_info = &state.texture_info;
-
-    if (scancode >= SDL_SCANCODE_1 && scancode <= SDL_SCANCODE_0)
+    if (event->type != SDL_EVENT_MOUSE_WHEEL)
     {
-        uint8_t number = ((scancode + 1) - SDL_SCANCODE_1) % 10;
-        state.tmp_scale *= 10;
-        state.tmp_scale += number;
+        return;
     }
 
-    switch (scancode)
-    {
-    case SDL_SCANCODE_ESCAPE:
-        return SDL_APP_SUCCESS;
-    case SDL_SCANCODE_R:
-        restore_default_args_into_state();
-        return SDL_APP_CONTINUE;
-    case SDL_SCANCODE_RIGHT:
-        texture_info->x += 1;
-        break;
-    case SDL_SCANCODE_LEFT:
-        texture_info->x += -1;
-        break;
-    case SDL_SCANCODE_DOWN:
-        texture_info->y += 1;
-        break;
-    case SDL_SCANCODE_UP:
-        texture_info->y -= 1;
-        break;
-    }
-
-    if (!state.scale_mode)
-    {
-        if (scancode == SDL_SCANCODE_W)
-        {
-            state.scale_mode = SDL_SCANCODE_W;
-        }
-        else if (scancode == SDL_SCANCODE_I)
-        {
-            state.scale_mode = SDL_SCANCODE_I;
-        }
-        state.tmp_scale = 0;
-    }
-    else
-    {
-        if (scancode == SDL_SCANCODE_RETURN)
-        {
-            if (state.scale_mode == SDL_SCANCODE_W)
-            {
-                state.window_scale = state.tmp_scale / 100.0f;
-            }
-            if (state.scale_mode == SDL_SCANCODE_I)
-            {
-                state.image_scale = state.tmp_scale / 100.0f;
-            }
-
-            SDL_SetWindowSize(
-                window,
-                texture->w * state.window_scale,
-                texture->h * state.window_scale);
-            SDL_SetRenderScale(
-                state.renderer,
-                state.image_scale,
-                state.image_scale);
-
-            state.tmp_scale = 0;
-            state.scale_mode = SDL_SCANCODE_UNKNOWN;
-        }
-        if (scancode == SDL_SCANCODE_ESCAPE)
-        {
-            state.tmp_scale = 0;
-            state.scale_mode = SDL_SCANCODE_UNKNOWN;
-            return SDL_APP_CONTINUE;
-        }
-    }
-
-    return SDL_APP_CONTINUE;
-}
-
-static SDL_AppResult handle_mouse_wheel_event(float y)
-{
-    state.opacity += y > .0f ? +.1f : -.1f;
+    state.opacity += event->wheel.y > .0f ? +.1f : -.1f;
     state.opacity = SDL_clamp(state.opacity, 0.0f, 1.0f);
 
     SDL_SetWindowOpacity(state.window, state.opacity);
-
-    return SDL_APP_CONTINUE;
 }
 
-static SDL_AppResult handle_mouse_button_event(SDL_Event *event)
+static void move_image_by_mouse_cursor_handler(SDL_Event *event)
 {
     switch (event->type)
     {
@@ -276,7 +208,7 @@ static SDL_AppResult handle_mouse_button_event(SDL_Event *event)
     {
         if (!state.is_dragging)
         {
-            return SDL_APP_CONTINUE;
+            return;
         }
         // since our renderer is scaled we need to fix the event before usage
         SDL_ConvertEventToRenderCoordinates(state.renderer, event);
@@ -284,25 +216,73 @@ static SDL_AppResult handle_mouse_button_event(SDL_Event *event)
         state.texture_info.y += event->motion.yrel;
     }
     }
+}
+
+SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
+{
+    parse_args(argc, argv);
+
+    if (!SDL_Init(SDL_INIT_VIDEO))
+    {
+        SDL_Log("Couldn't initialize SDL: %s", SDL_GetError());
+        return SDL_APP_FAILURE;
+    }
+
+    if (!SDL_SetHint(SDL_HINT_MAIN_CALLBACK_RATE, "60"))
+    {
+        SDL_Log("Couldn't set framerate: %s", SDL_GetError());
+        return SDL_APP_FAILURE;
+    }
+
+    if (!SDL_CreateWindowAndRenderer(
+            /*title*/ "A fucking moron",
+            /*width*/ 320,
+            /*height*/ 240,
+            /*window flags*/ SDL_WINDOW_ALWAYS_ON_TOP | SDL_WINDOW_TRANSPARENT | SDL_WINDOW_RESIZABLE,
+            &state.window,
+            &state.renderer))
+    {
+        SDL_Log("Couldn't create window/renderer: %s", SDL_GetError());
+        return SDL_APP_FAILURE;
+    }
+
+    state.texture = IMG_LoadTexture(state.renderer, args.filename);
+    if (state.texture == NULL)
+    {
+        SDL_Log("Couldn't load texture SDL: %s", SDL_GetError());
+        return SDL_APP_FAILURE;
+    }
+
+    state.window_scale = args.window_scale;
+    state.image_scale = args.image_scale;
+    state.opacity = args.opacity;
+    state.texture_info = (SDL_FRect){
+        .x = 0,
+        .y = 0,
+        .w = state.texture->w,
+        .h = state.texture->h,
+    };
+
+    SDL_SetWindowSize(state.window, state.texture->w * state.window_scale, state.texture->h * state.window_scale);
+    SDL_SetRenderScale(state.renderer, state.image_scale, state.image_scale);
+    SDL_SetWindowOpacity(state.window, state.opacity);
+    SDL_SetTextureScaleMode(state.texture, SDL_SCALEMODE_NEAREST);
 
     return SDL_APP_CONTINUE;
 }
 
 SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event)
 {
-    switch (event->type)
+    if (event->type == SDL_EVENT_QUIT)
     {
-    case SDL_EVENT_QUIT:
         return SDL_APP_SUCCESS;
-    case SDL_EVENT_KEY_DOWN:
-        return handle_key_down_event(event->key.scancode);
-    case SDL_EVENT_MOUSE_WHEEL:
-        return handle_mouse_wheel_event(event->wheel.y);
-    case SDL_EVENT_MOUSE_MOTION:
-    case SDL_EVENT_MOUSE_BUTTON_UP:
-    case SDL_EVENT_MOUSE_BUTTON_DOWN:
-        return handle_mouse_button_event(event);
     }
+
+    move_image_by_arrows_handler(event);
+    move_image_by_mouse_cursor_handler(event);
+    scale_window_and_image_handler(event);
+    restore_default_state_handler(event);
+    change_opacity_handler(event);
 
     return SDL_APP_CONTINUE;
 }
