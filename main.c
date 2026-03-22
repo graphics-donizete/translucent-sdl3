@@ -99,8 +99,6 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
 {
     parse_args(argc, argv);
 
-    SDL_Surface *surface = NULL;
-
     if (!SDL_Init(SDL_INIT_VIDEO))
     {
         SDL_Log("Couldn't initialize SDL: %s", SDL_GetError());
@@ -113,17 +111,11 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
         return SDL_APP_FAILURE;
     }
 
-    if (!(surface = IMG_Load(args.filename)))
-    {
-        SDL_Log("Couldn't load image: %s", SDL_GetError());
-        return SDL_APP_FAILURE;
-    }
-
     if (!SDL_CreateWindowAndRenderer(
-            "translucent",
-            surface->w * args.window_scale,
-            surface->h * args.window_scale,
-            SDL_WINDOW_ALWAYS_ON_TOP | SDL_WINDOW_TRANSPARENT | SDL_WINDOW_RESIZABLE,
+            /*title*/           "A fucking moron",
+            /*width*/           320,
+            /*height*/          240,
+            /*window flags*/    SDL_WINDOW_ALWAYS_ON_TOP | SDL_WINDOW_TRANSPARENT | SDL_WINDOW_RESIZABLE,
             &state.window,
             &state.renderer))
     {
@@ -131,19 +123,23 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
         return SDL_APP_FAILURE;
     }
 
-    if (!(state.texture = SDL_CreateTextureFromSurface(state.renderer, surface)))
+    state.texture = IMG_LoadTexture(state.renderer, args.filename);
+    if (state.texture == NULL)
     {
-        SDL_Log("Couldn't create texture: %s", SDL_GetError());
+        SDL_Log("Couldn't load texture SDL: %s", SDL_GetError());
         return SDL_APP_FAILURE;
     }
-    SDL_DestroySurface(surface);
 
     state.window_scale = args.window_scale;
     state.image_scale = args.image_scale;
+    state.texture_info = (SDL_FRect){
+        .x = 0,
+        .y = 0,
+        .w = state.texture->w,
+        .h = state.texture->h,
+    };
 
-    state.texture_info.w = state.texture->w;
-    state.texture_info.h = state.texture->h;
-
+    SDL_SetWindowSize(state.window, state.texture->w * state.window_scale, state.texture->h * state.window_scale);
     SDL_SetWindowOpacity(state.window, state.opacity);
     SDL_SetRenderScale(state.renderer, state.image_scale, state.image_scale);
     SDL_SetTextureScaleMode(state.texture, SDL_SCALEMODE_NEAREST);
