@@ -69,13 +69,11 @@ struct
     SDL_Window *window;
     SDL_Renderer *renderer;
     SDL_Texture *texture;
+    SDL_FRect texture_info;
 
     float window_scale;
     float image_scale;
     float opacity;
-    SDL_FRect texture_info;
-
-    bool is_dragging;
 } static state;
 
 struct
@@ -146,22 +144,21 @@ static void scale_by_keyboard_handler(SDL_Event *event)
 
 static void move_image_by_arrows_handler(SDL_Event *event)
 {
-    SDL_Scancode scancode = event->key.scancode;
-    SDL_FRect *info = &state.texture_info;
+    SDL_FRect *rect = &state.texture_info;
 
-    switch (scancode)
+    switch (event->key.scancode)
     {
     case SDL_SCANCODE_RIGHT:
-        info->x += 1;
+        rect->x += 1;
         break;
     case SDL_SCANCODE_LEFT:
-        info->x -= 1;
+        rect->x -= 1;
         break;
     case SDL_SCANCODE_DOWN:
-        info->y += 1;
+        rect->y += 1;
         break;
     case SDL_SCANCODE_UP:
-        info->y -= 1;
+        rect->y -= 1;
         break;
     }
 }
@@ -201,16 +198,15 @@ static void change_opacity_handler(SDL_Event *event)
 
 static void move_image_by_mouse_cursor_handler(SDL_Event *event)
 {
+    if (event->button.button != SDL_BUTTON_LEFT)
+    {
+        return;
+    }
+
     switch (event->type)
     {
-    case SDL_EVENT_MOUSE_BUTTON_DOWN:
-    {
-        state.is_dragging = true;
-        break;
-    }
     case SDL_EVENT_MOUSE_BUTTON_UP:
     {
-        state.is_dragging = false;
         // round our drag and drop to be pixel perfect
         state.texture_info.x = round(state.texture_info.x);
         state.texture_info.y = round(state.texture_info.y);
@@ -219,11 +215,7 @@ static void move_image_by_mouse_cursor_handler(SDL_Event *event)
 
     case SDL_EVENT_MOUSE_MOTION:
     {
-        if (!state.is_dragging)
-        {
-            return;
-        }
-        // since our renderer is scaled we need to fix the event before usage
+        // Needed after you call SDL_SetRenderScale on that scale
         SDL_ConvertEventToRenderCoordinates(state.renderer, event);
         state.texture_info.x += event->motion.xrel;
         state.texture_info.y += event->motion.yrel;
