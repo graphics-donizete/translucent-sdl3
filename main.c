@@ -122,7 +122,7 @@ static void show_open_file_dialog_callback(void *userdata, const char *const *fi
         SDL_Log("Filelist is null: %s", SDL_GetError());
         return;
     }
-
+    
     const char *const filename = filelist[0];
     printf("Selected file: %s", filename);
 
@@ -134,8 +134,6 @@ static void show_open_file_dialog_callback(void *userdata, const char *const *fi
 static void show_open_file_dialog()
 {
     const SDL_DialogFileFilter filters[] = {
-        {"PNG images", "png"},
-        {"JPEG images", "jpg;jpeg"},
         {"All images", "png;jpg;jpeg"},
     };
 
@@ -144,7 +142,7 @@ static void show_open_file_dialog()
         /*userData*/ NULL,
         state.window,
         filters,
-        /*nfilters*/ 3,
+        /*nfilters*/ sizeof(filters) / sizeof(*filters),
         args.path,
         /*allowMany*/ false);
 }
@@ -158,7 +156,7 @@ struct
     .is_scaling = false,
 };
 
-static void scale_by_keyboard_handler(SDL_Event *event)
+static void scale_by_keyboard(SDL_Event *event)
 {
     if (event->type != SDL_EVENT_KEY_DOWN)
     {
@@ -215,7 +213,7 @@ static void scale_by_keyboard_handler(SDL_Event *event)
     }
 }
 
-static void move_image_by_arrows_handler(SDL_Event *event)
+static void move_image_by_arrows(SDL_Event *event)
 {
     SDL_FRect *rect = &state.texture_info;
 
@@ -236,7 +234,7 @@ static void move_image_by_arrows_handler(SDL_Event *event)
     }
 }
 
-static void restore_default_state_handler(SDL_Event *event)
+static void restore_default_state_by_pressing_r(SDL_Event *event)
 {
     if (event->key.scancode != SDL_SCANCODE_R)
     {
@@ -256,7 +254,7 @@ static void restore_default_state_handler(SDL_Event *event)
     state.texture_info.y = 0;
 }
 
-static void change_opacity_handler(SDL_Event *event)
+static void change_opacity_by_wheel(SDL_Event *event)
 {
     if (event->type != SDL_EVENT_MOUSE_WHEEL)
     {
@@ -269,7 +267,7 @@ static void change_opacity_handler(SDL_Event *event)
     SDL_SetWindowOpacity(state.window, state.opacity);
 }
 
-static void move_image_by_mouse_cursor_handler(SDL_Event *event)
+static void move_image_by_mouse_cursor(SDL_Event *event)
 {
     if (event->button.button != SDL_BUTTON_LEFT)
     {
@@ -293,6 +291,14 @@ static void move_image_by_mouse_cursor_handler(SDL_Event *event)
         state.texture_info.x += event->motion.xrel;
         state.texture_info.y += event->motion.yrel;
     }
+    }
+}
+
+static void trigger_file_picker_by_double_click(SDL_Event *event)
+{
+    if (event->type == SDL_EVENT_MOUSE_BUTTON_DOWN && event->button.clicks == 2)
+    {
+        show_open_file_dialog();
     }
 }
 
@@ -341,11 +347,12 @@ SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event)
         return SDL_APP_SUCCESS;
     }
 
-    move_image_by_arrows_handler(event);
-    move_image_by_mouse_cursor_handler(event);
-    scale_by_keyboard_handler(event);
-    restore_default_state_handler(event);
-    change_opacity_handler(event);
+    move_image_by_arrows(event);
+    move_image_by_mouse_cursor(event);
+    scale_by_keyboard(event);
+    restore_default_state_by_pressing_r(event);
+    change_opacity_by_wheel(event);
+    trigger_file_picker_by_double_click(event);
 
     return SDL_APP_CONTINUE;
 }
