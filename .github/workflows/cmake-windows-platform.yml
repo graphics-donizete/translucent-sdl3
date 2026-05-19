@@ -16,13 +16,13 @@ jobs:
       with:
         submodules: 'recursive'
 
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         repository: ci-cd-donizete/cmake-toolchain
         path: ${{github.workspace}}/cmake-toolchain
 
     - name: Install mingw-w64
-      run: sudo apt update && sudo apt install -y mingw-w64
+      run: sudo apt update && sudo apt install -y mingw-w64 nasm
 
     - name: Configure CMake
       run: >
@@ -35,14 +35,14 @@ jobs:
       run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} --parallel
 
     - name: Upload
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: translucent-sdl3.exe
         path: ${{github.workspace}}/build/translucent-sdl3.exe
         compression-level: 9
 
     - name: Release
-      uses: softprops/action-gh-release@v2
+      uses: softprops/action-gh-release@v3
       with:
         tag_name: nightly
         make_latest: true

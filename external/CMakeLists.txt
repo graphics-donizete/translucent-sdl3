@@ -1,4 +1,6 @@
 set(BUILD_SHARED_LIBS OFF)
+
+set(SDLIMAGE_VENDORED ON)
 set(SDLTTF_VENDORED ON)
 
 subdirs(SDL SDL_image SDL_ttf)
