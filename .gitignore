@@ -2,3 +2,4 @@
 build
 *.jpeg
 *.png
+resources/include/resources*

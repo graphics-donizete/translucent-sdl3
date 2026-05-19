@@ -4,10 +4,15 @@
 #include <SDL3/SDL_main.h>
 #include <SDL3_image/SDL_image.h>
 
+#include <SDL3_ttf/SDL_textengine.h>
+#include <SDL3_ttf/SDL_ttf.h>
+
 #include <getopt.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+
+#include <resources/font.h>
 
 struct
 {
@@ -76,6 +81,10 @@ struct
     SDL_Texture *texture;
     SDL_FRect texture_info;
 
+    TTF_Font *text_font;
+    TTF_TextEngine *text_engine;
+    TTF_Text *text;
+
     float window_scale;
     float image_scale;
     float opacity;
@@ -83,6 +92,9 @@ struct
     .window = NULL,
     .renderer = NULL,
     .texture = NULL,
+    .text_font = NULL,
+    .text_engine = NULL,
+    .text = NULL,
 };
 
 static void initialize_texture_from_filename(const char *const filename)
@@ -304,9 +316,28 @@ static void trigger_file_picker_by_double_click(SDL_Event *event)
     }
 }
 
+static void draw_bottom_left_rendered_text(const char *text)
+{
+    int text_width, text_height;
+    int renderer_width, renderer_height;
+
+    TTF_SetTextString(state.text, text, strlen(text));
+
+    SDL_GetRenderOutputSize(state.renderer, &renderer_width, &renderer_height);
+    TTF_GetTextSize(state.text, &text_width, &text_height);
+
+    TTF_DrawRendererText(state.text, 0, renderer_height - text_height);
+}
+
 SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
 {
     parse_args(argc, argv);
+
+    if (!TTF_Init())
+    {
+        SDL_Log("Couldn't initialize TTF: %s", SDL_GetError());
+        return SDL_APP_FAILURE;
+    }
 
     if (!SDL_Init(SDL_INIT_VIDEO))
     {
@@ -329,6 +360,26 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
             &state.renderer))
     {
         SDL_Log("Couldn't create window/renderer: %s", SDL_GetError());
+        return SDL_APP_FAILURE;
+    }
+
+    state.text_font = TTF_OpenFontIO(SDL_IOFromConstMem(default_font_ttf, default_font_ttf_size), true, 18.0f * 2);
+    if (state.text_font == NULL)
+    {
+        SDL_Log("Couldn't create TTF_font: %s", SDL_GetError());
+        return SDL_APP_FAILURE;
+    }
+
+    state.text_engine = TTF_CreateRendererTextEngine(state.renderer);
+    if (state.text_engine == NULL)
+    {
+        SDL_Log("Couldn't create TTF_TextEngine: %s", SDL_GetError());
+        return SDL_APP_FAILURE;
+    }
+    state.text = TTF_CreateText(state.text_engine, state.text_font, NULL, 0);
+    if (state.text == NULL)
+    {
+        SDL_Log("Couldn't create TTF_Text: %s", SDL_GetError());
         return SDL_APP_FAILURE;
     }
 
@@ -362,7 +413,10 @@ SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event)
 SDL_AppResult SDL_AppIterate(void *)
 {
     SDL_RenderClear(state.renderer);
+
     SDL_RenderTexture(state.renderer, state.texture, NULL, &state.texture_info);
+    draw_bottom_left_rendered_text("Hello World");
+
     SDL_RenderPresent(state.renderer);
 
     return SDL_APP_CONTINUE;
@@ -370,4 +424,24 @@ SDL_AppResult SDL_AppIterate(void *)
 
 void SDL_AppQuit(void *appstate, SDL_AppResult result)
 {
+    (void)appstate;
+    (void)result;
+
+    if (state.text)
+    {
+        TTF_DestroyText(state.text);
+    }
+    if (state.text_engine)
+    {
+        TTF_DestroyRendererTextEngine(state.text_engine);
+    }
+    if (state.text_font)
+    {
+        TTF_CloseFont(state.text_font);
+    }
+    if (state.texture)
+    {
+        SDL_DestroyTexture(state.texture);
+    }
+    TTF_Quit();
 }
